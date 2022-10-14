@@ -124,6 +124,29 @@
                 function renew(string name, uint duration) external payable;
                 event NameRenewed(string name, bytes32 indexed label, uint cost, uint expires);
                 ```
+### Gravity Bridge
+* `Gravity`
+    * 功能：该合约是`EVM`类公链（如ethereum，bsc，tron等）向`WNS`公链跨链传递信息和资产的关键合约。
+    * 特性：
+        * 不依赖中间第三方，仅需依赖`WNS`公链的验证人合集。
+    * 接口：
+        ```solidity
+        function updateValset()
+        function submitBatch()
+        function sendToCosmos()
+        ```
+    * 参考：
+        * https://github.com/Gravity-Bridge/Gravity-Bridge/blob/main/solidity/contracts/contract-explanation.md
+
+### ERC4337 账户抽象
+* `Wallet`
+    * 功能：该合约是实现了合约钱包功能，支持任意的验证方式以及执行任意逻辑等
+    * 特性：
+        * 支持多签和社交恢复
+        * 支持其他种类的密码学签名验证算法
+        * 可升级
+    * 参考：
+        * https://github.com/ethereum/EIPs/blob/3fd65b1a782912bfc18cb975c62c55f733c7c96e/EIPS/eip-4337.md
                 
 
 ## 未实现合约
