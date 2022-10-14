@@ -10,7 +10,7 @@
     * 特性：
         * 一个域名只有一个**owner**账户，该账户可能是**EOA**或者合约账户
         * 域名解析合约（**resolver**）负责该域名的解析工作
-        * ==在非WNS公链上部署时本合约仅支持该公链的原生地址成为域名的**owner**，在WNS公链上部署时本合约支持所有WNS协议已兼容的公链的原生地址均可成为域名的**owner*（未实现）==
+        * ==在非WNS公链上部署时本合约仅支持该公链的原生地址成为域名的**owner**，在WNS公链上部署时本合约支持所有WNS协议已兼容的公链的原生地址均可成为域名的**owner**（未实现）==
         * ==当用户新注册或者更新域名及域名的**owner**等信息时，如果本合约所在公链存在实现了IBC协议的跨链合约（预编译合约或普通智能合约），本合约需要调用跨链合约将信息同步到WNS公链或**owner**原生的公链，如果跨链失败，本合约需回滚所有状态（未实现）==
     * 接口:
         * public:
@@ -96,6 +96,7 @@
             * 用户结合域名和一个自己生成的任意的`secret`生成`commitment hash`.
             * 用户将`commitment hash`提交给该合约。
             * 用户需要在至少一分钟，最多24小时后提交域名注册申请，并且一并提交`secret`供该合约验证。
+            * ==该合约需将用户的注册费用归集到`Treasury`合约中（未实现）==
         * 接口：
             * public:
                 * read:
@@ -124,6 +125,32 @@
                 event NameRenewed(string name, bytes32 indexed label, uint cost, uint expires);
                 ```
                 
+
+## 未实现合约
+
+* `ReservedDomains`
+    * 功能：该合约保留一部分精品web3域名，并设立保留期限，在到期前不支持用户注册该域名，到期后这部分域名将公开拍卖，拍卖所得收入将进入金库给用户和`DAO`分红。
+    * 特性：
+        * 存储需保留的`web3`域名，并允许该合约的`controller`添加或移除保留域名。
+        * `Registry`或`Web3Registrar`等其他合约可查询某`web3`域名是否在保留库中。
+        * 提供域名锁定`timelock`功能。
+        * 当`timelock`满足条件之后，支持`delegatecall`某个`Auction`竞拍合约对保留域名进行拍卖。
+        * 该合约的`controller`可更换`Auction`合约，以方便升级竞拍逻辑。
+        * 在非`WNS`公链的其他公链部署时不支持竞拍功能。
+    * 接口：
+        * external:
+            * read:
+            ```solidity
+            * function isReserved(string name) view external returns(bool);
+            ```
+            * write:
+            ```solidity
+            * function addReservedName(string name) onlyController external;
+            => event NameAdded(string name)
+            
+            * function removeReservedName(string name) onlyController external;
+            => event NameRemoved(string name)
+            ```
 
                 
 
