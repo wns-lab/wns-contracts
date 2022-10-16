@@ -160,3 +160,9 @@
         function name(bytes32 node) external view returns (string memory)
         ```
         
+    * `PriceOracle`
+        * 接口
+            * external
+            ```solidity
+            function price(string calldata name, uint expires, uint duration) external view returns(uint)
+            ```
