@@ -139,27 +139,27 @@
         * 接口：
         
             * wirte
-        ```solidity
-        function setApprovalForAll(address operator, bool approved) external
+            ```solidity
+            function setApprovalForAll(address operator, bool approved) external
 
-        function multicall(bytes[] calldata data) external returns(bytes[] memory results)
+            function multicall(bytes[] calldata data) external returns(bytes[] memory results)
 
-        function setAddr(bytes32 node, uint coinType, bytes memory a) public authorised(node)
-        ```
+            function setAddr(bytes32 node, uint coinType, bytes memory a) public authorised(node)
+            ```
         
-        * read:
-        ```solidity
-        function isAuthorised(bytes32 node) internal override view returns(bool)
+            * read:
+            ```solidity
+            function isAuthorised(bytes32 node) internal override view returns(bool)
 
-        function isApprovedForAll(address account, address operator) public view returns (bool)
+            function isApprovedForAll(address account, address operator) public view returns (bool)
 
-        function addr(bytes32 node) public view returns (address payable)
+            function addr(bytes32 node) public view returns (address payable)
 
-        function addr(bytes32 node, uint coinType) public view returns(bytes memory)
+            function addr(bytes32 node, uint coinType) public view returns(bytes memory)
 
-        function name(bytes32 node) external view returns (string memory)
-        ```
-        
+            function name(bytes32 node) external view returns (string memory)
+            ```
+    
     * `PriceOracle`
         * 接口
             * external
