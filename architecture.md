@@ -10,7 +10,7 @@
     * 特性：
         * 一个域名只有一个**owner**账户，该账户可能是**EOA**或者合约账户
         * 域名解析合约（**resolver**）负责该域名的解析工作
-        * ==在非WNS公链上部署时本合约仅支持该公链的原生地址成为域名的**owner**，在WNS公链上部署时本合约支持所有WNS协议已兼容的公链的原生地址均可成为域名的**owner*（未实现）==
+        * ==在非WNS公链上部署时本合约仅支持该公链的原生地址成为域名的**owner**，在WNS公链上部署时本合约支持所有WNS协议已兼容的公链的原生地址均可成为域名的**owner**（未实现）==
         * ==当用户新注册或者更新域名及域名的**owner**等信息时，如果本合约所在公链存在实现了IBC协议的跨链合约（预编译合约或普通智能合约），本合约需要调用跨链合约将信息同步到WNS公链或**owner**原生的公链，如果跨链失败，本合约需回滚所有状态（未实现）==
     * 接口:
         * public:
@@ -96,6 +96,7 @@
             * 用户结合域名和一个自己生成的任意的`secret`生成`commitment hash`.
             * 用户将`commitment hash`提交给该合约。
             * 用户需要在至少一分钟，最多24小时后提交域名注册申请，并且一并提交`secret`供该合约验证。
+            * ==该合约需将用户的注册费用归集到`Treasury`合约中（未实现）==
         * 接口：
             * public:
                 * read:
@@ -109,6 +110,7 @@
                 function valid(string name) public view returns(bool);
                 function available(string name) public view returns(bool);
                 function makeCommitment(string name, address owner, bytes32 secret) pure public returns(bytes32);
+                function makeCommitmentWithConfig(string memory name, address owner, bytes32 secret, address resolver, address addr) pure public returns(bytes32)
                 ```
                 * write:
                 ```solidity
@@ -116,6 +118,12 @@
 
                 function register(string name, address owner, uint duration, bytes32 secret) public payable;
                 => event NameRegistered(string name, bytes32 indexed label, address indexed owner, uint cost, uint expires);
+                
+                function registerWithConfig(string memory name, address owner, uint duration, bytes32 secret, address resolver, address addr) public payable;
+                => event NameRegistered(string name, bytes32 indexed label, address indexed owner, uint cost, uint expires);
+                
+                function renew(string calldata name, uint duration) external payable
+                => event NameRenewed(string name, bytes32 indexed label, uint cost, uint expires);
                 ```
             * external:
                 * write:
@@ -123,8 +131,38 @@
                 function renew(string name, uint duration) external payable;
                 event NameRenewed(string name, bytes32 indexed label, uint cost, uint expires);
                 ```
-                
 
-                
+    * `PublicResolver`
+        * 功能：
+            * 该合约实现了适用于大多数标准 ENS 用例的通用 ENS 解析器。公共解析器允许相应名称的所有者更新 ENS 记录。
+        
+        * 接口：
+        
+            * wirte
+            ```solidity
+            function setApprovalForAll(address operator, bool approved) external
 
-                
+            function multicall(bytes[] calldata data) external returns(bytes[] memory results)
+
+            function setAddr(bytes32 node, uint coinType, bytes memory a) public authorised(node)
+            ```
+        
+            * read:
+            ```solidity
+            function isAuthorised(bytes32 node) internal override view returns(bool)
+
+            function isApprovedForAll(address account, address operator) public view returns (bool)
+
+            function addr(bytes32 node) public view returns (address payable)
+
+            function addr(bytes32 node, uint coinType) public view returns(bytes memory)
+
+            function name(bytes32 node) external view returns (string memory)
+            ```
+    
+    * `PriceOracle`
+        * 接口
+            * external
+            ```solidity
+            function price(string calldata name, uint expires, uint duration) external view returns(uint)
+            ```
