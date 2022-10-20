@@ -9,8 +9,10 @@ contract ReservedNodes is Ownable {
     event ReservedNodeAdded(bytes32 node);
     event ReservedNodeRemoved(bytes32 node);
 
-    constructor(bytes32[] nodes) {
-        reservedNodes = nodes;
+    constructor(bytes32[] memory nodes) {
+        for (uint i=0; i<nodes.length; i++) {
+            reservedNodes[nodes[i]] = true;
+        }
     }
 
     function isReserved(bytes32 node) public view virtual returns (bool) {
