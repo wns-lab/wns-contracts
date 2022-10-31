@@ -131,7 +131,15 @@
                 function renew(string name, uint duration) external payable;
                 event NameRenewed(string name, bytes32 indexed label, uint cost, uint expires);
                 ```
-
+                
+            * write:
+            ```solidity
+            * function addReservedName(string name) onlyController external;
+            => event NameAdded(string name)
+            
+            * function removeReservedName(string name) onlyController external;
+            => event NameRemoved(string name)
+            ```      
     * `PublicResolver`
         * 功能：
             * 该合约实现了适用于大多数标准 ENS 用例的通用 ENS 解析器。公共解析器允许相应名称的所有者更新 ENS 记录。
@@ -165,4 +173,47 @@
             * external
             ```solidity
             function price(string calldata name, uint expires, uint duration) external view returns(uint)
+            ```
+            
+### Gravity Bridge
+* `Gravity`
+    * 功能：该合约是`EVM`类公链（如ethereum，bsc，tron等）向`WNS`公链跨链传递信息和资产的关键合约。
+    * 特性：
+        * 不依赖中间第三方，仅需依赖`WNS`公链的验证人合集。
+    * 接口：
+        ```solidity
+        function updateValset()
+        function submitBatch()
+        function sendToCosmos()
+        ```
+    * 参考：
+        * https://github.com/Gravity-Bridge/Gravity-Bridge/blob/main/solidity/contracts/contract-explanation.md
+
+### ERC4337 账户抽象
+* `Wallet`
+    * 功能：该合约是实现了合约钱包功能，支持任意的验证方式以及执行任意逻辑等
+    * 特性：
+        * 支持多签和社交恢复
+        * 支持其他种类的密码学签名验证算法
+        * 可升级
+    * 参考：
+        * https://github.com/ethereum/EIPs/blob/3fd65b1a782912bfc18cb975c62c55f733c7c96e/EIPS/eip-4337.md
+                
+
+## 未实现合约
+
+* `ReservedDomains`
+    * 功能：该合约保留一部分精品web3域名，并设立保留期限，在到期前不支持用户注册该域名，到期后这部分域名将公开拍卖，拍卖所得收入将进入金库给用户和`DAO`分红。
+    * 特性：
+        * 存储需保留的`web3`域名，并允许该合约的`controller`添加或移除保留域名。
+        * `Registry`或`Web3Registrar`等其他合约可查询某`web3`域名是否在保留库中。
+        * 提供域名锁定`timelock`功能。
+        * 当`timelock`满足条件之后，支持`delegatecall`某个`Auction`竞拍合约对保留域名进行拍卖。
+        * 该合约的`controller`可更换`Auction`合约，以方便升级竞拍逻辑。
+        * 在非`WNS`公链的其他公链部署时不支持竞拍功能。
+    * 接口：
+        * external:
+            * read:
+            ```solidity
+            * function isReserved(string name) view external returns(bool);
             ```
