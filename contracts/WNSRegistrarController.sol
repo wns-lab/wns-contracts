@@ -1,7 +1,10 @@
 pragma solidity >=0.8.4;
 
+import "./BaseRegistrarImplementation.sol";
 import "./StringUtils.sol";
-import "./IWNSRegistrarController.sol";
+import "@ensdomains/ens-contracts/contracts/resolvers/Resolver.sol";
+import "@ensdomains/ens-contracts/contracts/registry/ReverseRegistrar.sol";
+import "./IETHRegistrarController.sol";
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/introspection/IERC165.sol";
@@ -14,8 +17,10 @@ contract WNSRegistrarController is Ownable, IWNSRegistrarController {
     using StringUtils for *;
     using Address for address;
 
-    bytes32 private constant ETH_NODE =
-        0x93cdeb708b7545dc668eb9280176169d1c33cfd8ed6f04690a0bcc88a93fc4ae;
+    bytes32 private constant WEB3_NODE =
+        0x587d09fe5fa45354680537d38145a28b772971e0f293af3ee0c536fc919710fb;
+    
+    Gravity gravity;
 
     BaseRegistrarImplementation immutable base;
     ReverseRegistrar public immutable reverseRegistrar;
@@ -32,13 +37,17 @@ contract WNSRegistrarController is Ownable, IWNSRegistrarController {
         uint256 expires
     );
 
-    modifier onlyGravity() {}
+    modifier onlyGravity(address caller) {
+        require(caller == gravity);
+        _;
+    }
 
     constructor(
         BaseRegistrarImplementation _base,
-        ReverseRegistrar _reverseRegistrar
+        ReverseRegistrar _reverseRegistrar,
+        Gravity _gravity
     ) {
-
+        gravity = _gravity;
         base = _base;
         reverseRegistrar = _reverseRegistrar;
     }
