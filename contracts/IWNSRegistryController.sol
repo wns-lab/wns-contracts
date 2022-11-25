@@ -2,12 +2,12 @@ pragma solidity >=0.8.4;
 
 interface IWNSRegistrarController {
     function registerFromWNS(
-        uint256,
-        string calldata,
+        bytes32,
+        address,
         address,
         uint256,
-        address,
-        bool
+        uint256,
+        address
     ) external payable;
 
     function renew(string calldata, uint256) external payable;

@@ -1,11 +1,13 @@
 pragma solidity 0.8.10;
 
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "./IWNSRegistrarController";
+import "./CosmosToken.sol";
+import "./WNSRegistryController.sol"
 
 error InvalidSignature();
 error InvalidValsetNonce(uint256 newNonce, uint256 currentNonce);
@@ -23,20 +25,18 @@ error BatchTimedOut();
 error LogicCallTimedOut();
 
 // This is being used purely to avoid stack too deep errors
-struct LogicCallArgs {
-	// Transfers out to the logic contract
-	uint256[] transferAmounts;
-	address[] transferTokenContracts;
+struct RegisterArgs {
+	// call registryController to register the name
+	uint256 registryFeeAmount;
+	address registryFeeToken;
 	// The fees (transferred to msg.sender)
-	uint256[] feeAmounts;
-	address[] feeTokenContracts;
-	// The arbitrary logic call
-	address logicContractAddress;
-	bytes payload;
+	uint256 relayerFeeAmount;
+	address relayerFeeToken;
 	// Invalidation metadata
 	uint256 timeOut;
-	bytes32 invalidationId;
-	uint256 invalidationNonce;
+	uint256 nonce;
+	bytes32 node;
+	address owner;
 }
 
 // This is used purely to avoid stack too deep errors
@@ -347,7 +347,7 @@ function updateValset(
 		// These are arrays of the parts of the validators signatures
 		ValSignature[] calldata _sigs,
 		// The batch of transactions
-		uint256[] calldata _tokenids,
+		uint256[] calldata _amounts,
 		address[] calldata _destinations,
 		uint256[] calldata _fees,
 		uint256 _batchNonce,
@@ -404,7 +404,7 @@ function updateValset(
 						state_gravityId,
 						// bytes32 encoding of "transactionBatch"
 						0x7472616e73616374696f6e426174636800000000000000000000000000000000,
-						_tokenids,
+						_amounts,
 						_destinations,
 						_fees,
 						_batchNonce,
@@ -424,7 +424,7 @@ function updateValset(
 				// Send transaction amounts to destinations
 				uint256 totalFee;
 				for (uint256 i = 0; i < _amounts.length; i++) {
-					IERC721(_tokenContract).safeTransfer(_destinations[i], _tokenids[i]);
+					IERC20(_tokenContract).safeTransfer(_destinations[i], _amounts[i]);
 					totalFee = totalFee + _fees[i];
 				}
 
@@ -552,6 +552,41 @@ function updateValset(
 		}
 	}
 
+	function sendToCosmos(
+		address _tokenContract,
+		bytes32 _destination,
+		uint256 _amount
+	) public nonReentrant {
+		// we snapshot our current balance of this token
+		uint256 ourStartingBalance = IERC20(_tokenContract).balanceOf(address(this));
+
+		// attempt to transfer the user specified amount
+		IERC20(_tokenContract).safeTransferFrom(msg.sender, address(this), _amount);
+
+		// check what this particular ERC20 implementation actually gave us, since it doesn't
+		// have to be at all related to the _amount
+		uint256 ourEndingBalance = IERC20(_tokenContract).balanceOf(address(this));
+
+		// a very strange ERC20 may trigger this condition, if we didn't have this we would
+		// underflow, so it's mostly just an error message printer
+		if (ourEndingBalance <= ourStartingBalance) {
+			revert InvalidSendToCosmos();
+		}
+
+		state_lastEventNonce = state_lastEventNonce + 1;
+
+		// emit to Cosmos the actual amount our balance has changed, rather than the user
+		// provided amount. This protects against a small set of wonky ERC20 behavior, like
+		// burning on send but not tokens that for example change every users balance every day.
+		emit SendToCosmosEvent(
+			_tokenContract,
+			msg.sender,
+			_destination,
+			ourEndingBalance - ourStartingBalance,
+			state_lastEventNonce
+		);
+	}
+
 	function deployERC20(
 		string calldata _cosmosDenom,
 		string calldata _name,
@@ -571,6 +606,94 @@ function updateValset(
 			_decimals,
 			state_lastEventNonce
 		);
+	}
+
+	// registerFromWNSInBatch register nodes from WNS chain
+	function registerFromWNSInBatch(
+		// The validators that approve the batch
+		ValsetArgs calldata _currentValset,
+		// These are arrays of the parts of the validators signatures
+		ValSignature[] calldata _sigs,
+		// The batch of transactions
+		RegisterArgs[] calldata _batch,
+	    address _registryController
+	) external nonReentrant {
+		// CHECKS scoped to reduce stack depth
+		{
+			// Check that the batch nonce is higher than the last nonce for this token
+			if (_batch.nonce <= state_lastBatchNonces[_registryController]) {
+				revert InvalidBatchNonce({
+					newNonce: _batch.nonce,
+					currentNonce: state_lastBatchNonces[_registryController]
+				});
+			}
+
+			// Check that the batch nonce is less than one million nonces forward from the old one
+			// this makes it difficult for an attacker to lock out the contract by getting a single
+			// bad batch through with uint256 max nonce
+			if (_batch.nonce > state_lastBatchNonces[_registryController] + 1000000) {
+				revert InvalidBatchNonce({
+					newNonce: _batch.nonce,
+					currentNonce: state_lastBatchNonces[_registryController]
+				});
+			}
+
+			// Check that the block height is less than the timeout height
+			if (block.number >= _batch.timeOut) {
+				revert BatchTimedOut();
+			}
+
+			// Check that current validators, powers, and signatures (v,r,s) set is well-formed
+			validateValset(_currentValset, _sigs);
+
+			// Check that the supplied current validator set matches the saved checkpoint
+			if (makeCheckpoint(_currentValset, state_gravityId) != state_lastValsetCheckpoint) {
+				revert IncorrectCheckpoint();
+			}
+
+			// Check that enough current validators have signed off on the transaction batch and valset
+			checkValidatorSignatures(
+				_currentValset,
+				_sigs,
+				// Get hash of the transaction batch and checkpoint
+				keccak256(
+					abi.encode(
+						state_gravityId,
+						// bytes32 encoding of "transactionBatch"
+						0x7472616e73616374696f6e426174636800000000000000000000000000000000,
+						_batch,
+						_registryController
+					)
+				),
+				state_powerThreshold
+			);
+
+			// ACTIONS
+
+			// Store batch nonce
+			state_lastBatchNonces[_registryController] = _batch.nonce;
+
+			{
+				// register the name
+				for (uint256 i = 0; i < _batch.length; i++) {
+					WNSRegistryController(_registryController).RegisterFromWNS(
+						_batch[i].owner,
+						_batch[i].name,
+						_batch[i].relayerFeeToken,
+						_batch[i].relayerFeeAmount
+					)
+				}
+
+				// Send transaction fees to msg.sender
+				IERC20(_relay).safeTransfer(msg.sender, totalFee);
+			}
+		}
+
+		// LOGS scoped to reduce stack depth
+		{
+			state_lastEventNonce = state_lastEventNonce + 1;
+			emit TransactionBatchExecutedEvent(_batchNonce, _tokenContract, state_lastEventNonce);
+		}
 	}
 
 	constructor(
@@ -629,3 +752,4 @@ function updateValset(
 		);
 	}
 }
+
