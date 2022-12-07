@@ -26,17 +26,27 @@ error LogicCallTimedOut();
 
 // This is being used purely to avoid stack too deep errors
 struct RegisterArgs {
-	// call registryController to register the name
-	uint256 registryFeeAmount;
-	address registryFeeToken;
 	// The fees (transferred to msg.sender)
-	uint256 relayerFeeAmount;
-	address relayerFeeToken;
-	// Invalidation metadata
-	uint256 timeOut;
-	uint256 nonce;
+	uint256 relayFeeAmount;
 	bytes32 node;
 	address owner;
+}
+
+// This is being used purely to avoid stack too deep errors
+struct LogicCallArgs {
+	// Transfers out to the logic contract
+	uint256[] transferAmounts;
+	address[] transferTokenContracts;
+	// The fees (transferred to msg.sender)
+	uint256[] feeAmounts;
+	address[] feeTokenContracts;
+	// The arbitrary logic call
+	address logicContractAddress;
+	bytes payload;
+	// Invalidation metadata
+	uint256 timeOut;
+	bytes32 invalidationId;
+	uint256 invalidationNonce;
 }
 
 // This is used purely to avoid stack too deep errors
@@ -118,6 +128,11 @@ contract Gravity is ReentrancyGuard {
 		bytes32 _invalidationId,
 		uint256 _invalidationNonce,
 		bytes _returnData,
+		uint256 _eventNonce
+	);
+	event NodeBatchRegisteredEvent(
+		uint256 indexed _batchNonce,
+		address indexed _RegistryController,
 		uint256 _eventNonce
 	);
 
@@ -616,14 +631,17 @@ function updateValset(
 		ValSignature[] calldata _sigs,
 		// The batch of transactions
 		RegisterArgs[] calldata _batch,
-	    address _registryController
+		uint256 _batchNonce,
+		uint256 _batchTimeout,
+	    address _registryController,
+		address _relayFeeToken
 	) external nonReentrant {
 		// CHECKS scoped to reduce stack depth
 		{
 			// Check that the batch nonce is higher than the last nonce for this token
-			if (_batch.nonce <= state_lastBatchNonces[_registryController]) {
+			if (_batchNonce <= state_lastBatchNonces[_registryController]) {
 				revert InvalidBatchNonce({
-					newNonce: _batch.nonce,
+					newNonce: _batchNonce,
 					currentNonce: state_lastBatchNonces[_registryController]
 				});
 			}
@@ -631,15 +649,15 @@ function updateValset(
 			// Check that the batch nonce is less than one million nonces forward from the old one
 			// this makes it difficult for an attacker to lock out the contract by getting a single
 			// bad batch through with uint256 max nonce
-			if (_batch.nonce > state_lastBatchNonces[_registryController] + 1000000) {
+			if (_batchNonce > state_lastBatchNonces[_registryController] + 1000000) {
 				revert InvalidBatchNonce({
-					newNonce: _batch.nonce,
+					newNonce: _batchNonce,
 					currentNonce: state_lastBatchNonces[_registryController]
 				});
 			}
 
 			// Check that the block height is less than the timeout height
-			if (block.number >= _batch.timeOut) {
+			if (block.number >= _batchTimeout) {
 				revert BatchTimedOut();
 			}
 
@@ -662,7 +680,10 @@ function updateValset(
 						// bytes32 encoding of "transactionBatch"
 						0x7472616e73616374696f6e426174636800000000000000000000000000000000,
 						_batch,
-						_registryController
+						_batchNonce,
+						_batchTimeout,
+						_registryController,
+						_relayFeeToken
 					)
 				),
 				state_powerThreshold
@@ -671,28 +692,28 @@ function updateValset(
 			// ACTIONS
 
 			// Store batch nonce
-			state_lastBatchNonces[_registryController] = _batch.nonce;
+			state_lastBatchNonces[_registryController] = _batchNonce;
 
 			{
 				// register the name
+				uint256 totalFee;
 				for (uint256 i = 0; i < _batch.length; i++) {
 					WNSRegistryController(_registryController).RegisterFromWNS(
 						_batch[i].owner,
 						_batch[i].name,
-						_batch[i].relayerFeeToken,
-						_batch[i].relayerFeeAmount
-					)
+					);
+					totalFee = totalFee + _batch[i].relayFeeAmount
 				}
 
 				// Send transaction fees to msg.sender
-				IERC20(_relay).safeTransfer(msg.sender, totalFee);
+				IERC20(_relayFeeToken).safeTransfer(msg.sender, totalFee);
 			}
 		}
 
 		// LOGS scoped to reduce stack depth
 		{
 			state_lastEventNonce = state_lastEventNonce + 1;
-			emit TransactionBatchExecutedEvent(_batchNonce, _tokenContract, state_lastEventNonce);
+			emit NodeBatchRegisteredEvent(_batchNonce, _registryController, state_lastEventNonce);
 		}
 	}
 
