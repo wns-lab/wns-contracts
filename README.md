@@ -1,1 +1,3 @@
 # wns-contracts
+
+add NameWrapper
